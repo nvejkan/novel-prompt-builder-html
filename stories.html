@@ -1,0 +1,384 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Stories - Novel Memory</title>
+    <link rel="stylesheet" href="css/styles.css">
+</head>
+<body>
+    <!-- Navigation -->
+    <nav class="navbar">
+        <div class="nav-container">
+            <div class="nav-brand">📚 Novel Memory</div>
+            <div class="nav-center" id="storySelector">
+                <!-- Story selector rendered by JS -->
+            </div>
+            <div class="nav-links">
+                <a href="index.html" class="nav-link">Prompt Builder</a>
+                <a href="extract.html" class="nav-link">Extract</a>
+                <a href="memory.html" class="nav-link">Memory</a>
+                <a href="stories.html" class="nav-link active">📖 Stories</a>
+            </div>
+        </div>
+    </nav>
+
+    <!-- Main Content -->
+    <div class="main-container">
+        <main class="main-content" style="max-width: 900px; margin: 0 auto;">
+            <!-- Page Header -->
+            <div class="page-header">
+                <h1>📖 Your Stories</h1>
+                <p>Manage your stories and their memory. Each story has its own separate memory bank.</p>
+            </div>
+
+            <!-- Create New Story -->
+            <div class="card">
+                <div class="card-title">Create New Story</div>
+                <div class="form-group">
+                    <input type="text" id="newStoryName" placeholder="Enter story name...">
+                </div>
+                <button class="btn btn-success" onclick="createStory()">
+                    ➕ Create Story
+                </button>
+            </div>
+
+            <!-- Stories List -->
+            <div class="card">
+                <div class="card-title">Your Stories</div>
+                <div id="storiesList">
+                    <!-- Stories rendered here -->
+                </div>
+            </div>
+
+            <!-- Backup & Restore -->
+            <div class="card">
+                <div class="card-title">Backup & Restore</div>
+                <p class="hint" style="margin-bottom: 1rem;">Export all your stories as a backup file, or import from a previous backup.</p>
+                
+                <div class="btn-group" style="margin-bottom: 1rem;">
+                    <button class="btn btn-primary" onclick="exportAllStories()">
+                        📤 Export All Stories
+                    </button>
+                    <button class="btn btn-danger" onclick="confirmImportReplace()">
+                        📥 Import & Replace All
+                    </button>
+                </div>
+
+                <div id="exportSection" style="display: none;">
+                    <div class="form-group">
+                        <label class="form-label">Backup JSON</label>
+                        <textarea id="exportOutput" class="json-input" readonly style="min-height: 150px;"></textarea>
+                    </div>
+                    <div class="btn-group">
+                        <button class="btn btn-primary" onclick="copyBackup()">
+                            📋 Copy Backup
+                        </button>
+                        <button class="btn btn-secondary" onclick="downloadBackup()">
+                            💾 Download File
+                        </button>
+                        <button class="btn btn-secondary" onclick="closeExport()">
+                            Close
+                        </button>
+                    </div>
+                </div>
+
+                <div id="importSection" style="display: none; margin-top: 1rem;">
+                    <div class="form-group">
+                        <label class="form-label">Paste Backup JSON</label>
+                        <textarea id="importInput" class="json-input" placeholder="Paste your backup JSON here..." style="min-height: 150px;"></textarea>
+                    </div>
+                    <div class="btn-group">
+                        <button class="btn btn-danger" onclick="executeImportReplace()">
+                            ⚠️ Replace All Stories
+                        </button>
+                        <button class="btn btn-secondary" onclick="closeImport()">
+                            Cancel
+                        </button>
+                    </div>
+                    <p class="hint" style="margin-top: 0.5rem; color: var(--danger);">⚠️ Warning: This will replace ALL your existing stories!</p>
+                </div>
+            </div>
+        </main>
+    </div>
+
+    <!-- Confirm Modal -->
+    <div class="modal-overlay" id="confirmModal">
+        <div class="modal">
+            <div class="modal-title" id="confirmTitle">Confirm Action</div>
+            <p id="confirmMessage" style="margin-bottom: 1rem; color: var(--text-secondary);"></p>
+            <div class="btn-group">
+                <button class="btn btn-danger" id="confirmYesBtn">Yes, Delete</button>
+                <button class="btn btn-secondary" onclick="closeConfirm()">Cancel</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Rename Modal -->
+    <div class="modal-overlay" id="renameModal">
+        <div class="modal">
+            <div class="modal-title">Rename Story</div>
+            <div class="form-group">
+                <label class="form-label">New Name</label>
+                <input type="text" id="renameInput">
+            </div>
+            <input type="hidden" id="renameStoryId">
+            <div class="btn-group">
+                <button class="btn btn-primary" onclick="executeRename()">Save</button>
+                <button class="btn btn-secondary" onclick="closeRename()">Cancel</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Scripts -->
+    <script src="js/storage.js"></script>
+    <script src="js/search.js"></script>
+    <script src="js/merge.js"></script>
+    <script src="js/prompt.js"></script>
+    <script src="js/ui.js"></script>
+    <script>
+        // State
+        let confirmCallback = null;
+
+        // DOM Elements
+        const storiesList = document.getElementById('storiesList');
+        const newStoryName = document.getElementById('newStoryName');
+        const exportSection = document.getElementById('exportSection');
+        const exportOutput = document.getElementById('exportOutput');
+        const importSection = document.getElementById('importSection');
+        const importInput = document.getElementById('importInput');
+        const confirmModal = document.getElementById('confirmModal');
+        const confirmTitle = document.getElementById('confirmTitle');
+        const confirmMessage = document.getElementById('confirmMessage');
+        const confirmYesBtn = document.getElementById('confirmYesBtn');
+        const renameModal = document.getElementById('renameModal');
+        const renameInput = document.getElementById('renameInput');
+        const renameStoryId = document.getElementById('renameStoryId');
+
+        // Initialize
+        function init() {
+            UI.renderStorySelector('storySelector');
+            renderStoriesList();
+
+            // Confirm button handler
+            confirmYesBtn.addEventListener('click', () => {
+                if (confirmCallback) confirmCallback();
+                closeConfirm();
+            });
+
+            // Enter key for new story
+            newStoryName.addEventListener('keypress', (e) => {
+                if (e.key === 'Enter') createStory();
+            });
+        }
+
+        // Render stories list
+        function renderStoriesList() {
+            const stories = Storage.getStoriesArray();
+            const activeId = Storage.getActiveStoryId();
+
+            if (stories.length === 0) {
+                storiesList.innerHTML = '<div class="empty-state">No stories yet. Create your first story above!</div>';
+                return;
+            }
+
+            let html = '';
+            stories.forEach(story => {
+                const isActive = story.id === activeId;
+                const stats = Storage.getStoryStats(story.id);
+                const typesStr = stats.types.length > 0 ? stats.types.join(', ') : 'none';
+
+                html += `
+                    <div class="story-card ${isActive ? 'active' : ''}">
+                        <div class="story-card-header">
+                            <div class="story-card-name">
+                                ${isActive ? '★ ' : ''}${UI.escapeHtml(story.name)}
+                                ${isActive ? '<span class="story-card-badge">Active</span>' : ''}
+                            </div>
+                        </div>
+                        <div class="story-card-meta">
+                            Created: ${UI.formatDate(story.created)}
+                        </div>
+                        <div class="story-card-meta">
+                            Updated: ${UI.formatDate(story.updated)}
+                        </div>
+                        <div class="story-card-stats">
+                            <span class="story-card-stat">📝 ${stats.entryCount} entries</span>
+                            <span class="story-card-stat">🏷️ Types: ${typesStr}</span>
+                        </div>
+                        <div class="story-card-actions">
+                            ${!isActive ? `<button class="btn btn-primary" onclick="selectStory('${story.id}')">📌 Select</button>` : ''}
+                            <button class="btn btn-secondary" onclick="showRename('${story.id}', '${UI.escapeHtml(story.name)}')">✏️ Rename</button>
+                            <button class="btn btn-secondary" onclick="exportSingleStory('${story.id}')">📤 Export</button>
+                            ${stories.length > 1 ? `<button class="btn btn-danger" onclick="confirmDeleteStory('${story.id}', '${UI.escapeHtml(story.name)}')">🗑️ Delete</button>` : ''}
+                        </div>
+                    </div>
+                `;
+            });
+
+            storiesList.innerHTML = html;
+        }
+
+        // Create story
+        function createStory() {
+            const name = newStoryName.value.trim();
+            if (!name) {
+                UI.toast('Please enter a story name', true);
+                return;
+            }
+
+            Storage.createStory(name);
+            newStoryName.value = '';
+            UI.toast(`Story "${name}" created!`);
+            UI.renderStorySelector('storySelector');
+            renderStoriesList();
+        }
+
+        // Select story
+        function selectStory(storyId) {
+            Storage.setActiveStory(storyId);
+            UI.toast('Story selected!');
+            UI.renderStorySelector('storySelector');
+            renderStoriesList();
+        }
+
+        // Show rename modal
+        function showRename(storyId, currentName) {
+            renameStoryId.value = storyId;
+            renameInput.value = currentName;
+            renameModal.classList.add('active');
+            renameInput.focus();
+        }
+
+        // Close rename modal
+        function closeRename() {
+            renameModal.classList.remove('active');
+        }
+
+        // Execute rename
+        function executeRename() {
+            const storyId = renameStoryId.value;
+            const newName = renameInput.value.trim();
+
+            if (!newName) {
+                UI.toast('Please enter a name', true);
+                return;
+            }
+
+            Storage.renameStory(storyId, newName);
+            UI.toast('Story renamed!');
+            closeRename();
+            UI.renderStorySelector('storySelector');
+            renderStoriesList();
+        }
+
+        // Confirm delete story
+        function confirmDeleteStory(storyId, name) {
+            show Confirm(
+                'Delete Story',
+                `Are you sure you want to delete "${name}"? This will delete all memory entries in this story. This cannot be undone!`,
+                () => {
+                    if (Storage.deleteStory(storyId)) {
+                        UI.toast('Story deleted!');
+                        UI.renderStorySelector('storySelector');
+                        renderStoriesList();
+                    } else {
+                        UI.toast('Cannot delete the only story', true);
+                    }
+                }
+            );
+        }
+
+        // Export single story
+        function exportSingleStory(storyId) {
+            const json = Storage.exportStory(storyId);
+            if (json) {
+                exportOutput.value = json;
+                exportSection.style.display = 'block';
+                exportSection.scrollIntoView({ behavior: 'smooth' });
+            }
+        }
+
+        // Export all stories
+        function exportAllStories() {
+            const json = Storage.exportAllStories();
+            exportOutput.value = json;
+            exportSection.style.display = 'block';
+            exportSection.scrollIntoView({ behavior: 'smooth' });
+        }
+
+        // Copy backup
+        function copyBackup() {
+            UI.copyToClipboard(exportOutput.value);
+        }
+
+        // Download backup
+        function downloadBackup() {
+            const data = exportOutput.value;
+            const blob = new Blob([data], { type: 'application/json' });
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = `novel-memory-backup-${new Date().toISOString().split('T')[0]}.json`;
+            document.body.appendChild(a);
+            a.click();
+            document.body.removeChild(a);
+            URL.revokeObjectURL(url);
+            UI.toast('Backup downloaded!');
+        }
+
+        // Close export
+        function closeExport() {
+            exportSection.style.display = 'none';
+        }
+
+        // Confirm import replace
+        function confirmImportReplace() {
+            importSection.style.display = 'block';
+            importSection.scrollIntoView({ behavior: 'smooth' });
+        }
+
+        // Close import
+        function closeImport() {
+            importSection.style.display = 'none';
+            importInput.value = '';
+        }
+
+        // Execute import replace
+        function executeImportReplace() {
+            const jsonStr = importInput.value.trim();
+            if (!jsonStr) {
+                UI.toast('Please paste backup JSON first', true);
+                return;
+            }
+
+            const result = Storage.importAllStories(jsonStr, true);
+            if (result.success) {
+                UI.toast(`Imported ${result.count} stories!`);
+                closeImport();
+                UI.renderStorySelector('storySelector');
+                renderStoriesList();
+            } else {
+                UI.toast(result.error, true);
+            }
+        }
+
+        // Show confirm modal
+        function showConfirm(title, message, callback) {
+            confirmTitle.textContent = title;
+            confirmMessage.textContent = message;
+            confirmCallback = callback;
+            confirmModal.classList.add('active');
+        }
+
+        // Close confirm modal
+        function closeConfirm() {
+            confirmModal.classList.remove('active');
+            confirmCallback = null;
+        }
+
+        // Start
+        init();
+    </script>
+</body>
+</html>

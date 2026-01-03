@@ -11,10 +11,14 @@
     <nav class="navbar">
         <div class="nav-container">
             <div class="nav-brand">📚 Novel Memory</div>
+            <div class="nav-center" id="storySelector">
+                <!-- Story selector rendered by JS -->
+            </div>
             <div class="nav-links">
                 <a href="index.html" class="nav-link">Prompt Builder</a>
                 <a href="extract.html" class="nav-link active">Extract</a>
                 <a href="memory.html" class="nav-link">Memory</a>
+                <a href="stories.html" class="nav-link">📖 Stories</a>
             </div>
         </div>
     </nav>
@@ -107,6 +111,7 @@ Example: The dragon soared over Winterfell as Jon Snow drew his sword Longclaw. 
 
         // Initialize
         function init() {
+            UI.renderStorySelector('storySelector');
             resetTypes();
 
             // Event listeners
@@ -123,7 +128,6 @@ Example: The dragon soared over Winterfell as Jon Snow drew his sword Longclaw. 
             extractTypes = Array.from(allTypes).sort();
             renderTypeTags();
             updatePrompt();
-            UI.toast('Types reset');
         }
 
         // Render type tags
@@ -138,7 +142,7 @@ Example: The dragon soared over Winterfell as Jon Snow drew his sword Longclaw. 
                 html += `
                     <span class="tag" data-type="${UI.escapeHtml(type)}">
                         ${UI.escapeHtml(type)}
-                        <span class="tag-remove" data-type="${UI .escapeHtml(type)}">×</span>
+                        <span class="tag-remove" data-type="${UI.escapeHtml(type)}">×</span>
                     </span>
                 `;
             });

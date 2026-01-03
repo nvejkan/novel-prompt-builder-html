@@ -11,10 +11,14 @@
     <nav class="navbar">
         <div class="nav-container">
             <div class="nav-brand">📚 Novel Memory</div>
+            <div class="nav-center" id="storySelector">
+                <!-- Story selector rendered by JS -->
+            </div>
             <div class="nav-links">
                 <a href="index.html" class="nav-link active">Prompt Builder</a>
                 <a href="extract.html" class="nav-link">Extract</a>
                 <a href="memory.html" class="nav-link">Memory</a>
+                <a href="stories.html" class="nav-link">📖 Stories</a>
             </div>
         </div>
     </nav>
@@ -110,6 +114,7 @@ Example: Jon Snow walked through the gates of Castle Black, his hand resting on 
 
         // Initialize
         function init() {
+            UI.renderStorySelector('storySelector');
             renderMemoryPanel();
             renderMatchedTags();
 

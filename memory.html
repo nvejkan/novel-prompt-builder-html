@@ -1,7 +1,6 @@
 <!DOCTYPE html>
 <html lang="en">
-<head>
-    <meta charset="UTF-8">
+<head> <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Memory Management - Novel Memory</title>
     <link rel="stylesheet" href="css/styles.css">
@@ -11,10 +10,14 @@
     <nav class="navbar">
         <div class="nav-container">
             <div class="nav-brand">📚 Novel Memory</div>
+            <div class="nav-center" id="storySelector">
+                <!-- Story selector rendered by JS -->
+            </div>
             <div class="nav-links">
                 <a href="index.html" class="nav-link">Prompt Builder</a>
                 <a href="extract.html" class="nav-link">Extract</a>
                 <a href="memory.html" class="nav-link active">Memory</a>
+                <a href="stories.html" class="nav-link">📖 Stories</a>
             </div>
         </div>
     </nav>
@@ -117,7 +120,7 @@ Expected format:
                             ➕ Add New Entry
                         </button>
                         <button class="btn btn-secondary" onclick="exportMemory()">
-                            📤 Export All JSON
+                            📤 Export Memory JSON
                         </button>
                         <button class="btn btn-danger" onclick="confirmClearAll()">
                             🗑️ Clear All Memory
@@ -193,6 +196,7 @@ Expected format:
 
         // Initialize
         function init() {
+            UI.renderStorySelector('storySelector');
             renderMemoryPanel();
             
             // Confirm button handler
@@ -324,7 +328,7 @@ Expected format:
             mergePreviewContainer.querySelectorAll('input[type="checkbox"]').forEach(cb => {
                 cb.addEventListener('change', (e) => {
                     const action = e.target.dataset.action;
-                    const key = e.target.dataset.key ;
+                    const key = e.target.dataset.key;
 
                     if (action === 'new') {
                         if (e.target.checked) {
@@ -373,9 +377,7 @@ Expected format:
         function applyMerge() {
             if (!mergeIncoming || !mergeAnalysis) return;
 
-            const result = Merge.apply(mergeAnalysis, selectedNewKeys, selectedUpdateKeys);
-
-            UI.toast(`Merge complete! Added: ${result.added}, Updated: ${result.updated}, Skipped: ${result.skipped}`);
+            const result = Merge.apply(mergeAnalysis, selectedNewKeys, selectedUpdateKeys); UI.toast(`Merge complete! Added: ${result.added}, Updated: ${result.updated}, Skipped: ${result.skipped}`);
             cancelMerge();
             jsonInput.value = '';
             renderMemoryPanel();
@@ -497,7 +499,7 @@ Expected format:
         function confirmClearAll() {
             showConfirm(
                 'Clear All Memory',
-                'Are you sure you want to delete ALL memory entries? This cannot be undone!',
+                'Are you sure you want to delete ALL memory entries for this story? This cannot be undone!',
                 () => {
                     Storage.clear();
                     UI.toast('All memory cleared!');
