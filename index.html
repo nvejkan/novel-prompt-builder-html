@@ -1,0 +1,286 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Prompt Builder - Novel Memory</title>
+    <link rel="stylesheet" href="css/styles.css">
+</head>
+<body>
+    <!-- Navigation -->
+    <nav class="navbar">
+        <div class="nav-container">
+            <div class="nav-brand">📚 Novel Memory</div>
+            <div class="nav-links">
+                <a href="index.html" class="nav-link active">Prompt Builder</a>
+                <a href="extract.html" class="nav-link">Extract</a>
+                <a href="memory.html" class="nav-link">Memory</a>
+            </div>
+        </div>
+    </nav>
+
+    <!-- Main Content -->
+    <div class="main-container">
+        <div class="page-layout">
+            <!-- Sidebar - Memory Panel -->
+            <aside class="sidebar" id="sidebar">
+                <button class="btn btn-secondary sidebar-toggle" onclick="toggleSidebar()">
+                    ☰ Toggle Memory Panel
+                </button>
+                <div class="sidebar-title">Memory Bank</div>
+                <div id="memoryPanel">
+                    <div class="empty-state">Loading...</div>
+                </div>
+            </aside>
+
+            <!-- Main Content Area -->
+            <main class="main-content">
+                <!-- Story Input -->
+                <div class="card">
+                    <div class="card-title">Your Story Input</div>
+                    <textarea 
+                        id="storyInput" 
+                        class="story-input" 
+                        placeholder="Type or paste your story here...
+
+Example: Jon Snow walked through the gates of Castle Black, his hand resting on Longclaw..."
+                    ></textarea>
+                    <p class="hint">Type your story and matching memory entries will be detected automatically.</p>
+                </div>
+
+                <!-- Matched Tags -->
+                <div class="card">
+                    <div class="card-title">Matched Memory Entries</div>
+                    <p class="hint">Auto-matched from your story. Click × to remove, or click items in the left panel to add manually.</p>
+                    <div class="tags-container" id="matchedTags">
+                        <span style="color: var(--text-secondary);">No matches yet</span>
+                    </div>
+                </div>
+
+                <!-- Instruction Input -->
+                <div class="card">
+                    <div class="card-title">Instruction (Optional)</div>
+                    <textarea 
+                        id="instructionInput" 
+                        style="min-height: 80px;"
+                        placeholder="Custom instruction for Gemini... (leave empty for default)"
+                    ></textarea>
+                    <p class="hint">Default: "Continue this story. Maintain consistency with the characters, locations, and details provided in MEMORY CONTEXT."</p>
+                </div>
+
+                <!-- Augmented Prompt Output -->
+                <div class="card">
+                    <div class="card-title">Augmented Prompt</div>
+                    <textarea 
+                        id="promptOutput" 
+                        class="prompt-output" 
+                        readonly
+                        placeholder="Your augmented prompt will appear here..."
+                    ></textarea>
+                    <div class="btn-group">
+                        <button class="btn btn-primary" onclick="copyPrompt()">
+                            📋 Copy Prompt
+                        </button>
+                        <button class="btn btn-secondary" onclick="clearAll()">
+                            🗑️ Clear All
+                        </button>
+                    </div>
+                </div>
+            </main>
+        </div>
+    </div>
+
+    <!-- Scripts -->
+    <script src="js/storage.js"></script>
+    <script src="js/search.js"></script>
+    <script src="js/merge.js"></script>
+    <script src="js/prompt.js"></script>
+    <script src="js/ui.js"></script>
+    <script>
+        // State
+        let matchedKeys = [];
+        let debounceTimer = null;
+
+        // DOM Elements
+        const storyInput = document.getElementById('storyInput');
+        const instructionInput = document.getElementById('instructionInput');
+        const promptOutput = document.getElementById('promptOutput');
+        const matchedTagsContainer = document.getElementById('matchedTags');
+        const memoryPanel = document.getElementById('memoryPanel');
+
+        // Initialize
+        function init() {
+            renderMemoryPanel();
+            renderMatchedTags();
+
+            // Event listeners
+            storyInput.addEventListener('input', onStoryChange);
+            instructionInput.addEventListener('input', updatePrompt);
+        }
+
+        // Render memory panel
+        function renderMemoryPanel() {
+            const grouped = Storage.getGroupedByType();
+
+            if (Object.keys(grouped).length === 0) {
+                memoryPanel.innerHTML = '<div class="empty-state">No memory entries yet.<br>Go to Memory page to add some.</div>';
+                return;
+            }
+
+            let html = '';
+            const sortedTypes = Object.keys(grouped).sort();
+
+            sortedTypes.forEach(type => {
+                html += `<div class="type-group">`;
+                html += `<div class="type-header">${UI.escapeHtml(type)} (${grouped[type].length})</div>`;
+
+                grouped[type].forEach(item => {
+                    const isSelected = matchedKeys.includes(item.key);
+                    html += `
+                        <div class="memory-item${isSelected ? ' selected' : ''}" 
+                             data-key="${UI.escapeHtml(item.key)}"
+                             title="${UI.escapeHtml(item.desc)}">
+                            ${UI.escapeHtml(item.key)}
+                        </div>
+                    `;
+                });
+
+                html += `</div>`;
+            });
+
+            memoryPanel.innerHTML = html;
+
+            // Add click handlers
+            memoryPanel.querySelectorAll('.memory-item').forEach(item => {
+                item.addEventListener('click', () => {
+                    const key = item.dataset.key;
+                    toggleKey(key);
+                });
+            });
+        }
+
+        // Render matched tags
+        function renderMatchedTags() {
+            if (matchedKeys.length === 0) {
+                matchedTagsContainer.innerHTML = '<span style="color: var(--text-secondary);">No matches yet</span>';
+                return;
+            }
+
+            let html = '';
+            matchedKeys.forEach(key => {
+                html += `
+                    <span class="tag" data-key="${UI.escapeHtml(key)}">
+                        ${UI.escapeHtml(key)}
+                        <span class="tag-remove" data-key="${UI.escapeHtml(key)}">×</span>
+                    </span>
+                `;
+            });
+
+            matchedTagsContainer.innerHTML = html;
+
+            // Add remove handlers
+            matchedTagsContainer.querySelectorAll('.tag-remove').forEach(btn => {
+                btn.addEventListener('click', (e) => {
+                    e.stopPropagation();
+                    const key = btn.dataset.key;
+                    removeKey(key);
+                });
+            });
+        }
+
+        // Toggle key selection
+        function toggleKey(key) {
+            if (matchedKeys.includes(key)) {
+                removeKey(key);
+            } else {
+                addKey(key);
+            }
+        }
+
+        // Add key
+        function addKey(key) {
+            if (!matchedKeys.includes(key)) {
+                matchedKeys.push(key);
+                renderMatchedTags();
+                renderMemoryPanel();
+                updatePrompt();
+            }
+        }
+
+        // Remove key
+        function removeKey(key) {
+            matchedKeys = matchedKeys.filter(k => k !== key);
+            renderMatchedTags();
+            renderMemoryPanel();
+            updatePrompt();
+        }
+
+        // Handle story input change
+        function onStoryChange() {
+            const text = storyInput.value;
+
+            // Debounce search
+            clearTimeout(debounceTimer);
+            debounceTimer = setTimeout(() => {
+                if (text.trim()) {
+                    const autoMatched = Search.findMatches(text);
+                    
+                    // Add auto-matched keys
+                    autoMatched.forEach(key => {
+                        if (!matchedKeys.includes(key)) {
+                            matchedKeys.push(key);
+                        }
+                    });
+                }
+                
+                renderMatchedTags();
+                renderMemoryPanel();
+                updatePrompt();
+            }, 300);
+        }
+
+        // Update prompt output
+        function updatePrompt() {
+            const story = storyInput.value;
+            const instruction = instructionInput.value;
+
+            if (!story.trim() && matchedKeys.length === 0) {
+                promptOutput.value = '';
+                return;
+            }
+
+            const prompt = Prompt.buildAugmented(story, matchedKeys, instruction);
+            promptOutput.value = prompt;
+        }
+
+        // Copy prompt
+        function copyPrompt() {
+            const text = promptOutput.value;
+            if (!text) {
+                UI.toast('Nothing to copy!', true);
+                return;
+            }
+            UI.copyToClipboard(text);
+        }
+
+        // Clear all
+        function clearAll() {
+            storyInput.value = '';
+            instructionInput.value = '';
+            promptOutput.value = '';
+            matchedKeys = [];
+            renderMatchedTags();
+            renderMemoryPanel();
+            UI.toast('Cleared all inputs');
+        }
+
+        // Toggle sidebar
+        function toggleSidebar() {
+            document.getElementById('sidebar').classList.toggle('collapsed');
+        }
+
+        // Start
+        init();
+    </script>
+</body>
+</html>

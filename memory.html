@@ -1,0 +1,533 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Memory Management - Novel Memory</title>
+    <link rel="stylesheet" href="css/styles.css">
+</head>
+<body>
+    <!-- Navigation -->
+    <nav class="navbar">
+        <div class="nav-container">
+            <div class="nav-brand">📚 Novel Memory</div>
+            <div class="nav-links">
+                <a href="index.html" class="nav-link">Prompt Builder</a>
+                <a href="extract.html" class="nav-link">Extract</a>
+                <a href="memory.html" class="nav-link active">Memory</a>
+            </div>
+        </div>
+    </nav>
+
+    <!-- Main Content -->
+    <div class="main-container">
+        <div class="page-layout">
+            <!-- Sidebar - Memory List -->
+            <aside class="sidebar" id="sidebar">
+                <button class="btn btn-secondary sidebar-toggle" onclick="toggleSidebar()">
+                    ☰ Toggle Memory Panel
+                </button>
+                <div class="sidebar-title">Saved Memory</div>
+                <div id="memoryPanel">
+                    <div class="empty-state">Loading...</div>
+                </div>
+            </aside>
+
+            <!-- Main Content Area -->
+            <main class="main-content">
+                <!-- Import Section -->
+                <div class="card">
+                    <div class="card-title">Import from Gemini</div>
+                    <p class="hint">Paste the JSON response from Gemini here.</p>
+                    <textarea 
+                        id="jsonInput" 
+                        class="json-input" 
+                        placeholder='Paste JSON here...
+
+Expected format:
+{
+  "Jon Snow": {"type": "character", "desc": "A brave knight..."},
+  "Winterfell": {"type": "location", "desc": "An ancient castle..."}
+}'
+                    ></textarea>
+                    <div class="btn-group">
+                        <button class="btn btn-primary" onclick="previewMerge()">
+                            🔍 Preview Merge
+                        </button>
+                        <button class="btn btn-secondary" onclick="clearJsonInput()">
+                            Clear
+                        </button>
+                    </div>
+                </div>
+
+                <!-- Merge Preview Section -->
+                <div class="card" id="mergePreviewCard" style="display: none;">
+                    <div class="card-title">Merge Preview</div>
+                    <p class="hint">Review changes before applying. Uncheck items you don't want to import/update.</p>
+                    <div id="mergePreview">
+                        <!-- Merge preview rendered here -->
+                    </div>
+                    <div class="btn-group">
+                        <button class="btn btn-success" onclick="applyMerge()">
+                            ✅ Apply Merge
+                        </button>
+                        <button class="btn btn-secondary" onclick="cancelMerge()">
+                            ❌ Cancel
+                        </button>
+                    </div>
+                </div>
+
+                <!-- Edit Entry Section -->
+                <div class="card" id="editCard">
+                    <div class="card-title" id="editCardTitle">Add New Entry</div>
+                    <div class="form-group">
+                        <label class="form-label">Key (Name)</label>
+                        <input type="text" id="editKey" placeholder="e.g., Jon Snow">
+                    </div>
+                    <div class="form-group">
+                        <label class="form-label">Type</label>
+                        <input type="text" id="editType" placeholder="e.g., character, location, item">
+                    </div>
+                    <div class="form-group">
+                        <label class="form-label">Description</label>
+                        <textarea 
+                            id="editDesc" 
+                            style="min-height: 100px;"
+                            placeholder="Brief description of this entry..."
+                        ></textarea>
+                    </div>
+                    <div class="btn-group">
+                        <button class="btn btn-success" onclick="saveEntry()">
+                            💾 Save Entry
+                        </button>
+                        <button class="btn btn-danger" id="deleteEntryBtn" style="display: none;" onclick="deleteEntry()">
+                            🗑️ Delete
+                        </button>
+                        <button class="btn btn-secondary" onclick="resetEditForm()">
+                            Cancel
+                        </button>
+                    </div>
+                </div>
+
+                <!-- Actions Section -->
+                <div class="card">
+                    <div class="card-title">Actions</div>
+                    <div class="btn-group">
+                        <button class="btn btn-primary" onclick="resetEditForm()">
+                            ➕ Add New Entry
+                        </button>
+                        <button class="btn btn-secondary" onclick="exportMemory()">
+                            📤 Export All JSON
+                        </button>
+                        <button class="btn btn-danger" onclick="confirmClearAll()">
+                            🗑️ Clear All Memory
+                        </button>
+                    </div>
+                </div>
+
+                <!-- Export Output -->
+                <div class="card" id="exportCard" style="display: none;">
+                    <div class="card-title">Exported JSON</div>
+                    <textarea 
+                        id="exportOutput" 
+                        class="json-input" 
+                        readonly
+                        style="min-height: 200px;"
+                    ></textarea>
+                    <div class="btn-group">
+                        <button class="btn btn-primary" onclick="copyExport()">
+                            📋 Copy JSON
+                        </button>
+                        <button class="btn btn-secondary" onclick="closeExport()">
+                            Close
+                        </button>
+                    </div>
+                </div>
+            </main>
+        </div>
+    </div>
+
+    <!-- Confirm Modal -->
+    <div class="modal-overlay" id="confirmModal">
+        <div class="modal">
+            <div class="modal-title" id="confirmTitle">Confirm Action</div>
+            <p id="confirmMessage" style="margin-bottom: 1rem; color: var(--text-secondary);"></p>
+            <div class="btn-group">
+                <button class="btn btn-danger" id="confirmYesBtn">Yes, Delete</button>
+                <button class="btn btn-secondary" onclick="closeConfirm()">Cancel</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Scripts -->
+    <script src="js/storage.js"></script>
+    <script src="js/search.js"></script>
+    <script src="js/merge.js"></script>
+    <script src="js/prompt.js"></script>
+    <script src="js/ui.js"></script>
+    <script>
+        // State
+        let currentEditKey = null;
+        let mergeIncoming = null;
+        let mergeAnalysis = null;
+        let selectedNewKeys = [];
+        let selectedUpdateKeys = [];
+        let confirmCallback = null;
+
+        // DOM Elements
+        const jsonInput = document.getElementById('jsonInput');
+        const mergePreviewCard = document.getElementById('mergePreviewCard');
+        const mergePreviewContainer = document.getElementById('mergePreview');
+        const editCardTitle = document.getElementById('editCardTitle');
+        const editKey = document.getElementById('editKey');
+        const editType = document.getElementById('editType');
+        const editDesc = document.getElementById('editDesc');
+        const deleteEntryBtn = document.getElementById('deleteEntryBtn');
+        const exportCard = document.getElementById('exportCard');
+        const exportOutput = document.getElementById('exportOutput');
+        const memoryPanel = document.getElementById('memoryPanel');
+        const confirmModal = document.getElementById('confirmModal');
+        const confirmTitle = document.getElementById('confirmTitle');
+        const confirmMessage = document.getElementById('confirmMessage');
+        const confirmYesBtn = document.getElementById('confirmYesBtn');
+
+        // Initialize
+        function init() {
+            renderMemoryPanel();
+            
+            // Confirm button handler
+            confirmYesBtn.addEventListener('click', () => {
+                if (confirmCallback) confirmCallback();
+                closeConfirm();
+            });
+        }
+
+        // Render memory panel
+        function renderMemoryPanel() {
+            const grouped = Storage.getGroupedByType();
+
+            if (Object.keys(grouped).length === 0) {
+                memoryPanel.innerHTML = '<div class="empty-state">No memory entries yet.<br>Import JSON or add entries manually.</div>';
+                return;
+            }
+
+            let html = '';
+            const sortedTypes = Object.keys(grouped).sort();
+
+            sortedTypes.forEach(type => {
+                html += `<div class="type-group">`;
+                html += `<div class="type-header">${UI.escapeHtml(type)} (${grouped[type].length})</div>`;
+
+                grouped[type].forEach(item => {
+                    const isSelected = currentEditKey === item.key;
+                    html += `
+                        <div class="memory-item${isSelected ? ' selected' : ''}" 
+                             data-key="${UI.escapeHtml(item.key)}"
+                             title="${UI.escapeHtml(item.desc)}">
+                            ${UI.escapeHtml(item.key)}
+                        </div>
+                    `;
+                });
+
+                html += `</div>`;
+            });
+
+            memoryPanel.innerHTML = html;
+
+            // Add click handlers
+            memoryPanel.querySelectorAll('.memory-item').forEach(item => {
+                item.addEventListener('click', () => {
+                    loadEntryForEdit(item.dataset.key);
+                });
+            });
+        }
+
+        // Render merge preview
+        function renderMergePreview() {
+            if (!mergeAnalysis) return;
+
+            let html = '';
+
+            // Summary
+            html += `<div class="merge-summary">`;
+            html += `<strong>Summary:</strong> `;
+            html += `<span style="color: var(--success);">+${mergeAnalysis.summary.new} new</span>, `;
+            html += `<span style="color: var(--warning);">~${mergeAnalysis.summary.update} updates</span>, `;
+            html += `<span style="color: var(--secondary);">${mergeAnalysis.summary.skip} unchanged</span>`;
+            html += `</div>`;
+
+            // New entries
+            if (mergeAnalysis.new.length > 0) {
+                html += `<div class="section-header new"><h4>✅ New Entries</h4></div>`;
+                mergeAnalysis.new.forEach(item => {
+                    const checked = selectedNewKeys.includes(item.key) ? 'checked' : '';
+                    html += `
+                        <div class="merge-item new">
+                            <div class="merge-item-header">
+                                <label class="checkbox-container">
+                                    <input type="checkbox" ${checked} data-action="new" data-key="${UI.escapeHtml(item.key)}">
+                                    <span class="merge-item-key">${UI.escapeHtml(item.key)}</span>
+                                </label>
+                                <span class="merge-item-type">${UI.escapeHtml(item.type)}</span>
+                            </div>
+                            <div class="merge-item-desc">${UI.escapeHtml(item.desc)}</div>
+                        </div>
+                    `;
+                });
+            }
+
+            // Update entries
+            if (mergeAnalysis.update.length > 0) {
+                html += `<div class="section-header update"><h4>⚠️ Updates</h4></div>`;
+                mergeAnalysis.update.forEach(item => {
+                    const checked = selectedUpdateKeys.includes(item.key) ? 'checked' : '';
+                    html += `
+                        <div class="merge-item update">
+                            <div class="merge-item-header">
+                                <label class="checkbox-container">
+                                    <input type="checkbox" ${checked} data-action="update" data-key="${UI.escapeHtml(item.key)}">
+                                    <span class="merge-item-key">${UI.escapeHtml(item.key)}</span>
+                                </label>
+                                <span class="merge-item-type">${UI.escapeHtml(item.type)}</span>
+                            </div>
+                            <div class="merge-diff">
+                                <div class="diff-old"><strong>Old:</strong> [${UI.escapeHtml(item.oldType)}] ${UI.escapeHtml(item.oldDesc)}</div>
+                                <div class="diff-new"><strong>New:</strong> [${UI.escapeHtml(item.type)}] ${UI.escapeHtml(item.desc)}</div>
+                            </div>
+                        </div>
+                    `;
+                });
+            }
+
+            // Skip entries
+            if (mergeAnalysis.skip.length > 0) {
+                html += `<div class="section-header skip"><h4>⏭️ Unchanged</h4></div>`;
+                mergeAnalysis.skip.forEach(item => {
+                    html += `
+                        <div class="merge-item skip">
+                            <div class="merge-item-header">
+                                <span class="merge-item-key">${UI.escapeHtml(item.key)}</span>
+                                <span class="merge-item-type">${UI.escapeHtml(item.type)}</span>
+                            </div>
+                        </div>
+                    `;
+                });
+            }
+
+            if (mergeAnalysis.new.length === 0 && mergeAnalysis.update.length === 0 && mergeAnalysis.skip.length === 0) {
+                html = '<div class="empty-state">No entries found in the JSON.</div>';
+            }
+
+            mergePreviewContainer.innerHTML = html;
+
+            // Add checkbox handlers
+            mergePreviewContainer.querySelectorAll('input[type="checkbox"]').forEach(cb => {
+                cb.addEventListener('change', (e) => {
+                    const action = e.target.dataset.action;
+                    const key = e.target.dataset.key ;
+
+                    if (action === 'new') {
+                        if (e.target.checked) {
+                            if (!selectedNewKeys.includes(key)) selectedNewKeys.push(key);
+                        } else {
+                            selectedNewKeys = selectedNewKeys.filter(k => k !== key);
+                        }
+                    } else if (action === 'update') {
+                        if (e.target.checked) {
+                            if (!selectedUpdateKeys.includes(key)) selectedUpdateKeys.push(key);
+                        } else {
+                            selectedUpdateKeys = selectedUpdateKeys.filter(k => k !== key);
+                        }
+                    }
+                });
+            });
+        }
+
+        // Preview merge
+        function previewMerge() {
+            const jsonStr = jsonInput.value.trim();
+            if (!jsonStr) {
+                UI.toast('Please paste JSON first', true);
+                return;
+            }
+
+            const result = Merge.parseJSON(jsonStr);
+            if (!result.success) {
+                UI.toast(result.error, true);
+                return;
+            }
+
+            mergeIncoming = result.data;
+            mergeAnalysis = Merge.analyze(result.data);
+
+            // Select all by default
+            selectedNewKeys = mergeAnalysis.new.map(item => item.key);
+            selectedUpdateKeys = mergeAnalysis.update.map(item => item.key);
+
+            renderMergePreview();
+            mergePreviewCard.style.display = 'block';
+            mergePreviewCard.scrollIntoView({ behavior: 'smooth' });
+        }
+
+        // Apply merge
+        function applyMerge() {
+            if (!mergeIncoming || !mergeAnalysis) return;
+
+            const result = Merge.apply(mergeAnalysis, selectedNewKeys, selectedUpdateKeys);
+
+            UI.toast(`Merge complete! Added: ${result.added}, Updated: ${result.updated}, Skipped: ${result.skipped}`);
+            cancelMerge();
+            jsonInput.value = '';
+            renderMemoryPanel();
+        }
+
+        // Cancel merge
+        function cancelMerge() {
+            mergePreviewCard.style.display = 'none';
+            mergeIncoming = null;
+            mergeAnalysis = null;
+            selectedNewKeys = [];
+            selectedUpdateKeys = [];
+        }
+
+        // Clear JSON input
+        function clearJsonInput() {
+            jsonInput.value = '';
+            cancelMerge();
+        }
+
+        // Load entry for editing
+        function loadEntryForEdit(key) {
+            const entry = Storage.get(key);
+            if (!entry) {
+                UI.toast('Entry not found', true);
+                return;
+            }
+
+            currentEditKey = key;
+            editCardTitle.textContent = 'Edit Entry';
+            editKey.value = key;
+            editKey.disabled = true;
+            editType.value = entry.type;
+            editDesc.value = entry.desc;
+            deleteEntryBtn.style.display = 'inline-flex';
+
+            renderMemoryPanel();
+            document.getElementById('editCard').scrollIntoView({ behavior: 'smooth' });
+        }
+
+        // Reset edit form
+        function resetEditForm() {
+            currentEditKey = null;
+            editCardTitle.textContent = 'Add New Entry';
+            editKey.value = '';
+            editKey.disabled = false;
+            editType.value = '';
+            editDesc.value = '';
+            deleteEntryBtn.style.display = 'none';
+            renderMemoryPanel();
+        }
+
+        // Save entry
+        function saveEntry() {
+            const key = editKey.value.trim();
+            const type = editType.value.trim().toLowerCase();
+            const desc = editDesc.value.trim();
+
+            if (!key) {
+                UI.toast('Key is required', true);
+                return;
+            }
+            if (!type) {
+                UI.toast('Type is required', true);
+                return;
+            }
+            if (!desc) {
+                UI.toast('Description is required', true);
+                return;
+            }
+
+            // Check for duplicate when adding new
+            if (!currentEditKey && Storage.get(key)) {
+                UI.toast('An entry with this key already exists!', true);
+                return;
+            }
+
+            Storage.set(key, type, desc);
+            UI.toast(currentEditKey ? 'Entry updated!' : 'Entry added!');
+            resetEditForm();
+            renderMemoryPanel();
+        }
+
+        // Delete entry
+        function deleteEntry() {
+            if (!currentEditKey) return;
+
+            showConfirm(
+                'Delete Entry',
+                `Are you sure you want to delete "${currentEditKey}"?`,
+                () => {
+                    Storage.delete(currentEditKey);
+                    UI.toast('Entry deleted!');
+                    resetEditForm();
+                    renderMemoryPanel();
+                }
+            );
+        }
+
+        // Export memory
+        function exportMemory() {
+            const json = Storage.export();
+            exportOutput.value = json;
+            exportCard.style.display = 'block';
+            exportCard.scrollIntoView({ behavior: 'smooth' });
+        }
+
+        // Copy export
+        function copyExport() {
+            UI.copyToClipboard(exportOutput.value);
+        }
+
+        // Close export
+        function closeExport() {
+            exportCard.style.display = 'none';
+        }
+
+        // Confirm clear all
+        function confirmClearAll() {
+            showConfirm(
+                'Clear All Memory',
+                'Are you sure you want to delete ALL memory entries? This cannot be undone!',
+                () => {
+                    Storage.clear();
+                    UI.toast('All memory cleared!');
+                    renderMemoryPanel();
+                    resetEditForm();
+                }
+            );
+        }
+
+        // Show confirm modal
+        function showConfirm(title, message, callback) {
+            confirmTitle.textContent = title;
+            confirmMessage.textContent = message;
+            confirmCallback = callback;
+            confirmModal.classList.add('active');
+        }
+
+        // Close confirm modal
+        function closeConfirm() {
+            confirmModal.classList.remove('active');
+            confirmCallback = null;
+        }
+
+        // Toggle sidebar
+        function toggleSidebar() {
+            document.getElementById('sidebar').classList.toggle('collapsed');
+        }
+
+        // Start
+        init();
+    </script>
+</body>
+</html>
